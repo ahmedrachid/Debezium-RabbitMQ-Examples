@@ -1,0 +1,38 @@
+version: "3.9"
+services:
+  postgres:
+    image: quay.io/debezium/example-postgres:2.3
+    ports:
+     - 5432:5432
+    environment:
+     - POSTGRES_USER=postgres
+     - POSTGRES_PASSWORD=postgres
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - 15672:15672
+      - 5552:5552
+      - 5672:5672
+    volumes:
+      - type: bind
+        source: ./conf/rabbitmq-defs.json
+        target: /etc/rabbitmq/rabbitmq-defs.json
+      - type: bind
+        source: ./conf/rabbitmq.conf
+        target: /etc/rabbitmq/rabbitmq.conf
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+  debezium-server:
+    image: quay.io/debezium/server:2.4
+    container_name: debezium-server
+    ports:
+      - 8080:8080
+    volumes:
+      - ./conf:/debezium/conf
+    depends_on:
+      rabbitmq:
+        condition: service_healthy

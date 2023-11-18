@@ -1,0 +1,58 @@
+version: "3.9"
+services:
+  mariadb:
+    image: mariadb:latest
+    restart: always
+    container_name: mariadb
+    ports:
+      - 3306:3306
+    environment:
+      - MARIADB_USER=root
+      - MARIADB_PASSWORD=mariadb
+      - MARIADB_ROOT_PASSWORD=mariadb
+      - MARIADB_DATABASE=test
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-pmariadb"]
+      interval: 2s
+      timeout: 20s
+      retries: 10
+    command: ["--log-bin=mysql-bin", "--verbose"]
+  mariadbsetup:
+    image: mariadb:latest
+    container_name: mariadbsetup
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      BINLOG_FORMAT: ROW
+    entrypoint: ["bash", "-c", "sleep 5 && mariadb -h mariadb -u root -pmariadb -e 'SET GLOBAL binlog_format=ROW;' && mariadb -h mariadb -u root -pmariadb -e 'USE test; CREATE TABLE IF NOT EXISTS test.customers(id INT, name VARCHAR(100)); SHOW TABLES;'"]
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - 15672:15672
+      - 5552:5552
+      - 5672:5672
+    volumes:
+      - type: bind
+        source: ./conf/rabbitmq-defs.json
+        target: /etc/rabbitmq/rabbitmq-defs.json
+      - type: bind
+        source: ./conf/rabbitmq.conf
+        target: /etc/rabbitmq/rabbitmq.conf
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+  debezium-server:
+    image: quay.io/debezium/server:2.4
+    container_name: debezium-server
+    ports:
+      - 8080:8080
+    volumes:
+      - ./conf:/debezium/conf
+    depends_on:
+      rabbitmq:
+        condition: service_healthy

@@ -1,0 +1,57 @@
+version: "3.9"
+services:
+  mysql:
+    image: mysql:latest
+    restart: always
+    container_name: mysql
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_USER=mysql
+      - MYSQL_PASSWORD=mysql
+      - MYSQL_ROOT_PASSWORD=mysql
+    healthcheck:
+      test: mysqladmin ping -h localhost -P 3306 -u root --password=mysql
+      interval: 2s
+      timeout: 20s
+      retries: 10
+  mysqlsetup:
+    image: mysql:latest
+    container_name: mysqlsetup
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      BINLOG_FORMAT: ROW
+    entrypoint: [ "bash", "-c" , "sleep 20 && mysql --host mysql --port=3306 --user=root --password=mysql -e 'SET GLOBAL binlog_format=ROW;'; mysql --host=mysql --port=3306 --user=root --password=mysql -e 'create database test;'; mysql --host=mysql --port=3306 --user=root --password=mysql --database=test -e 'create table customers(id int, name varchar(100))'"]
+  
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - 15672:15672
+      - 5552:5552
+      - 5672:5672
+    volumes:
+      - type: bind
+        source: ./conf/rabbitmq-defs.json
+        target: /etc/rabbitmq/rabbitmq-defs.json
+      - type: bind
+        source: ./conf/rabbitmq.conf
+        target: /etc/rabbitmq/rabbitmq.conf
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+  debezium-server:
+    image: quay.io/debezium/server:2.4
+    container_name: debezium-server
+    ports:
+      - 8080:8080
+    volumes:
+      - ./conf:/debezium/conf
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
